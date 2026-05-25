@@ -85,7 +85,7 @@ const WorkItemSchema = new Schema({
   auditLog: [AuditEntrySchema],
   department: String,
   actionItems: [ActionItemSchema],
-
+isDeleted: { type: Boolean, default: false },
   createdBy: String,
   createdAt: String,
   modifiedBy: String,

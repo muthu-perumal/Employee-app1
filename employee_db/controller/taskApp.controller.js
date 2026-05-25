@@ -10,7 +10,14 @@ import { Team } from "../model/team.model.js";
 export const getWorkItems = async (req, res) => {
   try {
     const { type, status, priority, ownerId, customer, teamId } = req.query;
-    const query = {};
+
+    const query = {
+      $or: [
+        { isDeleted: false },
+        { isDeleted: { $exists: false } }
+      ]
+    };
+
     if (type) query.workItemType = type;
     if (status) query.status = status;
     if (priority) query.priority = priority;
