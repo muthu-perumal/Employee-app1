@@ -114,6 +114,22 @@ const getAllEmployee = async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 };
+
+const getAllEmployees = async (req, res) => {
+  try {
+    const allEmployees = await Employee.find({
+      isDeleted: false,
+      status: "active",
+    }).sort({
+      first_name: 1,
+    });
+
+    res.status(200).json(allEmployees);
+  } catch (error) {
+    console.error("Error fetching Employee:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
 const getTodaysBirthdays = async (req, res) => {
 
   try {
@@ -495,5 +511,5 @@ export {
   editEmployee,
   deleteEmployee,
   checkEmail,
-  getDashboardData, getTodaysBirthdays,
+  getDashboardData, getTodaysBirthdays,getAllEmployees,
 };
