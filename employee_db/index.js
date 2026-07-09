@@ -1,4 +1,3 @@
-import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import connectDB from "./utils/DbConnector.js";
@@ -111,6 +110,8 @@ const startingServer = async () => {
     const aiProviders = getConfiguredProviders();
     console.log(`AI providers: ${aiProviders.length ? aiProviders.join(" → ") : "none (database-only answers)"}`);
     console.log(`Health check: http://localhost:${PORT}/api/health`);
+    const summaryApiUrl = (process.env.SUMMARY_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "");
+    console.log(`Patch summary service: ${summaryApiUrl}`);
   });
 };
 process.on("unhandledRejection", (e) => {

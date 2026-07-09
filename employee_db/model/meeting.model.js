@@ -33,6 +33,9 @@ const meetingSchema = new mongoose.Schema(
     notes: { type: String, default: "" },
     followUpDate: { type: String, default: "" },
     recordingLink: { type: String, default: "" },
+    teamsMeetingLink: { type: String, default: "" },
+    notifyUserId: { type: String, default: "" },
+    notifyEmail: { type: String, default: "" },
     actions: [meetingActionSchema],
   },
   { timestamps: true }

@@ -32,7 +32,15 @@ const AuditEntrySchema = new Schema({
   action: String,
   actorId: String,
   detail: String,
-  timestamp: String
+  timestamp: String,
+  changes: [
+    {
+      field: String,
+      label: String,
+      from: String,
+      to: String,
+    },
+  ],
 });
 
 const ChecklistItemSchema = new Schema({

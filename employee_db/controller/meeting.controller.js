@@ -1,4 +1,5 @@
 import { Meeting } from "../model/meeting.model.js";
+import { notifyMeetingChange } from "../utils/taskAppEmailNotify.js";
 
 export const getMeetings = async (req, res) => {
   try {
@@ -74,6 +75,7 @@ export const getMeetingById = async (req, res) => {
 export const createMeeting = async (req, res) => {
   try {
     const saved = await new Meeting(req.body).save();
+    notifyMeetingChange("created", saved.toObject());
     res.status(201).json(saved);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -98,6 +100,7 @@ export const updateMeeting = async (req, res) => {
       return res.status(404).json({ message: "Meeting not found" });
     }
 
+    notifyMeetingChange("updated", updated.toObject());
     res.json(updated);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -116,6 +119,7 @@ export const deleteMeeting = async (req, res) => {
       return res.status(404).json({ message: "Meeting not found" });
     }
 
+    notifyMeetingChange("deleted", deleted.toObject());
     res.json({ message: "Meeting deleted successfully" });
   } catch (error) {
     res.status(400).json({ message: error.message });

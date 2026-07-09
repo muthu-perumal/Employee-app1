@@ -6,6 +6,7 @@ import {
   createPatch,
   updatePatch,
   deletePatch,
+  summarizePatch,
 } from "../controller/patch.controller.js";
 import {
   getFeedback,
@@ -27,6 +28,7 @@ const router = express.Router();
 router.get("/patches", getPatches);
 router.get("/patches/stats", getPatchStats);
 router.get("/patches/:id", getPatchById);
+router.post("/patches/:id/summarize", summarizePatch);
 router.post("/patches", createPatch);
 router.put("/patches/:id", updatePatch);
 router.delete("/patches/:id", deletePatch);

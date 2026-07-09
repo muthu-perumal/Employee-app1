@@ -17,7 +17,9 @@ const TaskNoteSchema = new Schema({
                          // Check types.ts: export interface Note { ... actionItems: string[]; ... } -> Yes, strings.
   linkedWorkItems: [String], // WorkItem IDs
   createdBy: String,
-  recordingUrl: String
+  recordingUrl: String,
+  notifyUserId: { type: String, default: "" },
+  notifyEmail: { type: String, default: "" },
 }, {
   timestamps: true
 });

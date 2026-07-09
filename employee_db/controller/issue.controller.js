@@ -1,4 +1,5 @@
 import { Issue } from "../model/issue.model.js";
+import { notifyIssueChange } from "../utils/taskAppEmailNotify.js";
 
 export const getIssues = async (req, res) => {
   try {
@@ -78,6 +79,7 @@ export const getIssueById = async (req, res) => {
 export const createIssue = async (req, res) => {
   try {
     const saved = await new Issue(req.body).save();
+    notifyIssueChange("created", saved.toObject());
     res.status(201).json(saved);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -102,6 +104,7 @@ export const updateIssue = async (req, res) => {
       return res.status(404).json({ message: "Issue not found" });
     }
 
+    notifyIssueChange("updated", updated.toObject());
     res.json(updated);
   } catch (error) {
     res.status(400).json({ message: error.message });
@@ -120,6 +123,7 @@ export const deleteIssue = async (req, res) => {
       return res.status(404).json({ message: "Issue not found" });
     }
 
+    notifyIssueChange("deleted", deleted.toObject());
     res.json({ message: "Issue deleted successfully" });
   } catch (error) {
     res.status(400).json({ message: error.message });
