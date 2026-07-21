@@ -11,12 +11,21 @@ function splitValues(value) {
     .filter(Boolean);
 }
 
-export async function resolveNotifyEmails(entity = {}) {
+/**
+ * @param {object} entity
+ * @param {{ includeCommonInbox?: boolean }} [options]
+ *   includeCommonInbox — when true (default), also add TASK_APP_NOTIFY_EMAIL (e.g. ezallindia).
+ *   Meetings pass false so mail goes only to selected notify users.
+ */
+export async function resolveNotifyEmails(entity = {}, options = {}) {
+  const { includeCommonInbox = true } = options;
   const emails = new Set();
 
-  const common = process.env.TASK_APP_NOTIFY_EMAIL;
-  if (common) {
-    splitValues(common).forEach((email) => emails.add(email.toLowerCase()));
+  if (includeCommonInbox) {
+    const common = process.env.TASK_APP_NOTIFY_EMAIL;
+    if (common) {
+      splitValues(common).forEach((email) => emails.add(email.toLowerCase()));
+    }
   }
 
   splitValues(entity.notifyEmail).forEach((email) => {

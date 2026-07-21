@@ -102,11 +102,15 @@ const checkEmail = async (req, res) => {
   }
 };
 
+const EMPLOYEE_LIST_FIELDS =
+  "employee_id first_name last_name email status role profile_image department designation";
+
 const getAllEmployee = async (req, res) => {
   try {
-    const allEmployees = await Employee.find({ isDeleted: false }).sort({
-      status: 1,
-    });
+    const allEmployees = await Employee.find({ isDeleted: false })
+      .select(EMPLOYEE_LIST_FIELDS)
+      .sort({ status: 1 })
+      .lean();
 
     res.status(200).json(allEmployees);
   } catch (error) {
@@ -120,9 +124,10 @@ const getAllEmployees = async (req, res) => {
     const allEmployees = await Employee.find({
       isDeleted: false,
       status: "active",
-    }).sort({
-      first_name: 1,
-    });
+    })
+      .select(EMPLOYEE_LIST_FIELDS)
+      .sort({ first_name: 1 })
+      .lean();
 
     res.status(200).json(allEmployees);
   } catch (error) {

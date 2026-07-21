@@ -10,17 +10,38 @@ export const getMeetings = async (req, res) => {
       presenter,
       organization,
       search,
+      notifyUserId,
       page = 1,
       limit = 15,
     } = req.query;
 
     const query = {};
 
-    if (type && type !== "All Types") query.type = type;
-    if (outcome && outcome !== "All Outcomes") query.outcome = outcome;
-    if (status) query.status = status;
+    const toInQuery = (value) => {
+      const parts = String(value)
+        .split(",")
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .filter((entry) => entry !== "All Types" && entry !== "All Outcomes");
+      if (!parts.length) return null;
+      return parts.length === 1 ? parts[0] : { $in: parts };
+    };
+
+    const typeQuery = type ? toInQuery(type) : null;
+    const outcomeQuery = outcome ? toInQuery(outcome) : null;
+    const statusQuery = status ? toInQuery(status) : null;
+
+    if (typeQuery) query.type = typeQuery;
+    if (outcomeQuery) query.outcome = outcomeQuery;
+    if (statusQuery) query.status = statusQuery;
     if (presenter) query.presenter = new RegExp(presenter, "i");
     if (organization) query.organization = new RegExp(organization, "i");
+
+    // Only meetings where this user is a notify recipient (CSV field)
+    if (notifyUserId) {
+      const escaped = String(notifyUserId).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      query.notifyUserId = new RegExp(`(^|,)\\s*${escaped}\\s*(,|$)`, "i");
+    }
 
     if (search) {
       query.$or = [

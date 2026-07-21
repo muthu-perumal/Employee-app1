@@ -13,8 +13,8 @@ const ACTION_SUBJECT = {
   deleted: "Deleted",
 };
 
-async function dispatchEntityEmail({ label, action, subject, html, entity }) {
-  const recipients = await resolveNotifyEmails(entity);
+async function dispatchEntityEmail({ label, action, subject, html, entity, includeCommonInbox = true }) {
+  const recipients = await resolveNotifyEmails(entity, { includeCommonInbox });
   if (!recipients.length) {
     console.warn(`[email] No recipients for ${label}`);
     return;
@@ -82,6 +82,8 @@ export function notifyMeetingChange(action, meeting) {
         subject: `[EZOFIS] Meeting ${subjectAction}: ${title}${id ? ` (${id})` : ""}`,
         html: buildMeetingEmail(action, meeting),
         entity: meeting,
+        // Meetings: email only selected notify users — not TASK_APP_NOTIFY_EMAIL / ezallindia
+        includeCommonInbox: false,
       }),
     "meeting notification"
   );

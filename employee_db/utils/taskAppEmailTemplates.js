@@ -24,6 +24,28 @@ function escapeHtml(value) {
     .replace(/"/g, "&quot;");
 }
 
+/** Allow safe formatting tags through for rich meeting notes in email. */
+function sanitizeEmailHtml(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  const raw = String(value);
+  if (!/<\/?[a-z][\s\S]*>/i.test(raw)) {
+    return escapeHtml(raw).replace(/\n/g, "<br/>");
+  }
+
+  return raw
+    .replace(/<script[\s\S]*?>[\s\S]*?<\/script>/gi, "")
+    .replace(/on\w+\s*=\s*(['"]).*?\1/gi, "")
+    .replace(/javascript:/gi, "")
+    .replace(/<\/?(?!\/?(p|br|b|strong|i|em|u|ul|ol|li|span|a|h[1-3]|div)\b)[^>]*>/gi, "");
+}
+
+function formatCellValue(value) {
+  if (value && typeof value === "object" && value.html) {
+    return sanitizeEmailHtml(value.content ?? value.value ?? "");
+  }
+  return escapeHtml(value);
+}
+
 function formatDate(value) {
   if (!value) return "—";
   const date = new Date(value);
@@ -37,12 +59,21 @@ function formatDate(value) {
 
 function renderRows(rows) {
   return rows
-    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .filter(([, value]) => {
+      if (value && typeof value === "object" && value.html) {
+        const content = String(value.content ?? value.value ?? "")
+          .replace(/<p><\/p>/gi, "")
+          .replace(/&nbsp;/gi, "")
+          .trim();
+        return Boolean(content);
+      }
+      return value !== undefined && value !== null && value !== "";
+    })
     .map(
       ([label, value]) => `
         <tr>
           <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:13px;width:34%;vertical-align:top;">${escapeHtml(label)}</td>
-          <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-size:14px;font-weight:500;">${escapeHtml(value)}</td>
+          <td style="padding:10px 14px;border-bottom:1px solid #f1f5f9;color:#0f172a;font-size:14px;font-weight:500;">${formatCellValue(value)}</td>
         </tr>`
     )
     .join("");
@@ -243,7 +274,7 @@ export function buildMeetingEmail(action, meeting) {
       ["Meeting Time (IST)", formatDate(meeting.istTime)],
       ["Follow-up Date", formatDate(meeting.followUpDate)],
       ["Agenda", meeting.agenda],
-      ["Notes", meeting.notes],
+      ["Notes", { html: true, content: meeting.notes }],
       ["Pending Actions", pendingActions],
       ["Teams Meeting Link", teamsLink],
       ["Recording Link", meeting.recordingLink],
