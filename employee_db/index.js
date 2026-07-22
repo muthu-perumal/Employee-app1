@@ -17,7 +17,9 @@ import meetingRoutes from "./router/meetingRouter.js";
 import issueRoutes from "./router/issue.routes.js";
 import taskAppRoutes from "./router/taskApp.routes.js";
 import publishTrackerRoutes from "./router/publishTracker.routes.js";
+import whistleblowerRoutes from "./router/whistleblowerRouter.js";
 import { getConfiguredProviders } from "./utils/aiService.js";
+import { startLeaveAttendanceSchedulers } from "./jobs/leaveAttendanceScheduler.js";
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -36,7 +38,7 @@ const requireDb = (req, res, next) => {
 
 app.disable("x-powered-by");
 app.disable("etag");
-app.use(express.json({ limit: "1mb" }));
+app.use(express.json({ limit: "15mb" }));
 app.use(
   cors({
     origin: ["http://localhost:5173", "https://ez-emp-ui.azurewebsites.net"],
@@ -45,6 +47,7 @@ app.use(
 );
 
 app.use("/api/publish-tracker", requireDb, publishTrackerRoutes);
+app.use("/api/whistleblower", requireDb, whistleblowerRoutes);
 app.use("/api/attendance", requireDb, attendanceRoutes);
 app.use("/api/employee", requireDb, employeeRoutes);
 app.use("/api/asset", requireDb, assetRoutes);
@@ -73,6 +76,7 @@ const startingServer = async () => {
       await connectDB(URI, DATABASE_NAME);
       dbConnected = true;
       console.log("MongoDB connected successfully");
+      startLeaveAttendanceSchedulers();
       break;
     } catch (error) {
       const message = error?.message || String(error);

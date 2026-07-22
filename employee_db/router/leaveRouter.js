@@ -8,13 +8,15 @@ import {
     getAllBalances,
     getHolidays,
     createHoliday,
-    ensureAllBalances 
+    ensureAllBalances,
+    calculateLeaveDurationApi,
 } from "../controller/leave.controller.js";
 
 const router = express.Router();
 
 router.get("/", getLeaves);
 router.post("/", createLeave);
+router.post("/calculate-duration", calculateLeaveDurationApi);
 router.patch("/:id/status", updateLeaveStatus);
 router.get("/balances", getBalances);
 router.get("/all-balances", getAllBalances);

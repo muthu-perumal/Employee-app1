@@ -103,14 +103,40 @@ const checkEmail = async (req, res) => {
 };
 
 const EMPLOYEE_LIST_FIELDS =
-  "employee_id first_name last_name email status role profile_image department designation";
+  "employee_id first_name last_name email phone status role profile_image department position hire_date birth_date hourly_rate";
 
+/** List employees without heavy base64 image payloads (avoids ECONNRESET). */
 const getAllEmployee = async (req, res) => {
   try {
-    const allEmployees = await Employee.find({ isDeleted: false })
-      .select(EMPLOYEE_LIST_FIELDS)
-      .sort({ status: 1 })
-      .lean();
+    const allEmployees = await Employee.aggregate([
+      { $match: { isDeleted: false } },
+      {
+        $project: {
+          employee_id: 1,
+          first_name: 1,
+          last_name: 1,
+          email: 1,
+          phone: 1,
+          status: 1,
+          role: 1,
+          profile_image: 1,
+          department: 1,
+          position: 1,
+          hire_date: 1,
+          birth_date: 1,
+          hourly_rate: 1,
+          has_profile_image: {
+            $cond: [
+              { $eq: [{ $ifNull: ["$profile_imageFile", ""] }, ""] },
+              false,
+              true,
+            ],
+          },
+          id: { $toString: "$_id" },
+        },
+      },
+      { $sort: { status: 1, first_name: 1 } },
+    ]);
 
     res.status(200).json(allEmployees);
   } catch (error) {
@@ -121,18 +147,130 @@ const getAllEmployee = async (req, res) => {
 
 const getAllEmployees = async (req, res) => {
   try {
-    const allEmployees = await Employee.find({
-      isDeleted: false,
-      status: "active",
-    })
-      .select(EMPLOYEE_LIST_FIELDS)
-      .sort({ first_name: 1 })
-      .lean();
+    const allEmployees = await Employee.aggregate([
+      { $match: { isDeleted: false, status: "active" } },
+      {
+        $project: {
+          employee_id: 1,
+          first_name: 1,
+          last_name: 1,
+          email: 1,
+          phone: 1,
+          status: 1,
+          role: 1,
+          profile_image: 1,
+          department: 1,
+          position: 1,
+          hire_date: 1,
+          birth_date: 1,
+          hourly_rate: 1,
+          has_profile_image: {
+            $cond: [
+              { $eq: [{ $ifNull: ["$profile_imageFile", ""] }, ""] },
+              false,
+              true,
+            ],
+          },
+          id: { $toString: "$_id" },
+        },
+      },
+      { $sort: { first_name: 1 } },
+    ]);
 
     res.status(200).json(allEmployees);
   } catch (error) {
     console.error("Error fetching Employee:", error);
     res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+const getEmployeeProfileImage = async (req, res) => {
+  try {
+    const { empId } = req.params;
+    if (!empId) {
+      return res.status(400).json({ message: "Employee ID is required" });
+    }
+
+    const decodedId = decodeURIComponent(empId);
+    const filter = mongoose.Types.ObjectId.isValid(decodedId)
+      ? { _id: decodedId, isDeleted: false }
+      : { employee_id: decodedId, isDeleted: false };
+
+    const employee = await Employee.findOne(filter)
+      .select("profile_image profile_imageFile employee_id")
+      .lean();
+
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+
+    const image =
+      (employee.profile_imageFile && String(employee.profile_imageFile).trim()) ||
+      (employee.profile_image && String(employee.profile_image).trim()) ||
+      "";
+
+    if (!image) {
+      return res.status(404).json({ message: "No profile image" });
+    }
+
+    res.status(200).json({
+      employee_id: employee.employee_id,
+      profile_image: image,
+    });
+  } catch (error) {
+    console.error("Error fetching profile image:", error);
+    res.status(500).json({ message: "Server error", error: error.message });
+  }
+};
+
+/** Serve profile photo as binary image for <img src="..."> */
+const getEmployeeAvatar = async (req, res) => {
+  try {
+    const { empId } = req.params;
+    if (!empId) {
+      return res.status(400).json({ message: "Employee ID is required" });
+    }
+
+    const decodedId = decodeURIComponent(empId);
+    const filter = mongoose.Types.ObjectId.isValid(decodedId)
+      ? { _id: decodedId, isDeleted: false }
+      : { employee_id: decodedId, isDeleted: false };
+
+    const employee = await Employee.findOne(filter)
+      .select("profile_image profile_imageFile")
+      .lean();
+
+    if (!employee) {
+      return res.status(404).end();
+    }
+
+    const image =
+      (employee.profile_imageFile && String(employee.profile_imageFile).trim()) ||
+      (employee.profile_image && String(employee.profile_image).trim()) ||
+      "";
+
+    if (!image) {
+      return res.status(404).end();
+    }
+
+    if (image.startsWith("http://") || image.startsWith("https://")) {
+      return res.redirect(image);
+    }
+
+    const dataUriMatch = image.match(/^data:([^;]+);base64,(.+)$/s);
+    if (dataUriMatch) {
+      res.setHeader("Content-Type", dataUriMatch[1] || "image/jpeg");
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      return res.status(200).send(Buffer.from(dataUriMatch[2], "base64"));
+    }
+
+    // Raw base64 without data-uri prefix
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Cache-Control", "public, max-age=86400");
+    return res.status(200).send(Buffer.from(image, "base64"));
+  } catch (error) {
+    console.error("Error fetching avatar:", error);
+    res.status(500).end();
   }
 };
 const getTodaysBirthdays = async (req, res) => {
@@ -204,24 +342,30 @@ const editEmployee = async (req, res) => {
       return res.status(400).json({ message: "All Fields are required" });
     }
 
+    const $set = {
+      first_name,
+      last_name,
+      email,
+      phone,
+      department,
+      position,
+      hire_date,
+      hourly_rate,
+      profile_image,
+      status,
+      employee_id,
+      role,
+      birth_date,
+    };
+
+    // Only overwrite image when client explicitly sends the field
+    if (Object.prototype.hasOwnProperty.call(req.body, "profile_imageFile")) {
+      $set.profile_imageFile = profile_imageFile;
+    }
+
     const updatedEmployee = await Employee.findOneAndUpdate(
       { _id: empId },
-      {
-        $set: {
-          first_name,
-          last_name,
-          email,
-          phone,
-          department,
-          position,
-          hire_date,
-          hourly_rate,
-          profile_image,
-          status,
-          employee_id,
-          role, birth_date, profile_imageFile,
-        },
-      },
+      { $set },
       { new: true, runValidators: true }
     );
 
@@ -271,20 +415,20 @@ const editEmployee = async (req, res) => {
 
 const deleteEmployee = async (req, res) => {
   try {
-    const { employee_id } = req.params;
-    if (!employee_id) {
+    const { empId } = req.params;
+    if (!empId) {
       return res
         .status(400)
         .json({ message: "Employee ID is required for deletion." });
     }
 
+    const filter = mongoose.Types.ObjectId.isValid(empId)
+      ? { _id: empId, isDeleted: false }
+      : { employee_id: empId, isDeleted: false };
+
     const deletedEmployee = await Employee.findOneAndUpdate(
-      {
-        _id: employee_id,
-      },
-      {
-        $set: { isDeleted: true },
-      },
+      filter,
+      { $set: { isDeleted: true } },
       { new: true }
     );
 
@@ -517,4 +661,6 @@ export {
   deleteEmployee,
   checkEmail,
   getDashboardData, getTodaysBirthdays,getAllEmployees,
+  getEmployeeProfileImage,
+  getEmployeeAvatar,
 };

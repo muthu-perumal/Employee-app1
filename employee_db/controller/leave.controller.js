@@ -1,10 +1,18 @@
-
 import LeaveRequest from "../model/leaveRequest.model.js";
 import LeaveBalance from "../model/leaveBalance.model.js";
 import Holiday from "../model/holiday.model.js";
 import Notification from "../model/notification.model.js";
 import Employee from "../model/employee.model.js";
 import { AuditLogModel } from "../model/auditLog.model.js";
+import {
+    calculateLeaveDuration,
+    isPaidLeaveType,
+} from "../utils/leaveDuration.js";
+import {
+    notifyLeaveApproved,
+    notifyPaidLeaveSubmitted,
+} from "../utils/leaveWhatsAppNotify.js";
+import { notifyLeaveApplicationEmail } from "../utils/leaveEmailNotify.js";
 
 // Helper to apply monthly credits (1 AL + 1 CSL on the 1st of every month)
 const applyMonthlyCredits = async (balance) => {
@@ -82,27 +90,87 @@ export const getLeaves = async (req, res) => {
     }
 };
 
+export const calculateLeaveDurationApi = async (req, res) => {
+    try {
+        const {
+            leaveCategory = "multi_day",
+            startDate,
+            endDate,
+            startTime,
+            endTime,
+            year,
+        } = req.body;
+
+        const holidayQuery = { isActive: true };
+        if (year) holidayQuery.date = new RegExp(`^${year}`);
+
+        const holidays = await Holiday.find(holidayQuery).lean();
+        const totalDays = calculateLeaveDuration({
+            leaveCategory,
+            startDate,
+            endDate,
+            startTime,
+            endTime,
+            holidays: holidays.map((h) => h.date),
+        });
+
+        res.status(200).json({ totalDays, leaveCategory });
+    } catch (error) {
+        res.status(400).json({ message: error.message });
+    }
+};
+
 export const createLeave = async (req, res) => {
     try {
-        const { employeeId, leaveType, startDate, endDate, totalDays, reason } = req.body;
+        const {
+            employeeId,
+            leaveType,
+            leaveCategory = "multi_day",
+            startDate,
+            endDate,
+            startTime,
+            endTime,
+            totalDays: clientTotalDays,
+            reason,
+        } = req.body;
         const year = new Date().getFullYear();
+        const resolvedLeaveType =
+            leaveCategory === "hourly_permission" ? "Permission" : leaveType;
 
-        // 1. Check for conflicts
-        // TODO: A more robust overlap check could be done here, but trusting basic check for now
-        
-        // 2. Check balance
-        const { balance, available } = await getAvailableBalance(employeeId, leaveType, year);
-        if (available < totalDays) {
+        const holidays = await Holiday.find({ isActive: true }).lean();
+        const totalDays =
+            clientTotalDays ??
+            calculateLeaveDuration({
+                leaveCategory,
+                startDate,
+                endDate,
+                startTime,
+                endTime,
+                holidays: holidays.map((h) => h.date),
+            });
+
+        const requiresBalanceCheck = leaveCategory !== "hourly_permission";
+        const balanceType =
+            resolvedLeaveType === "HalfDay" ? "CSL" : resolvedLeaveType;
+
+        const { available } = await getAvailableBalance(employeeId, balanceType, year);
+        if (requiresBalanceCheck && balanceType !== "LOP" && available < totalDays) {
             return res.status(400).json({ message: "Insufficient leave balance" });
         }
 
+        const isPaidLeave = isPaidLeaveType(resolvedLeaveType);
+
         const newRequest = new LeaveRequest({
             employeeId,
-            leaveType,
+            leaveType: resolvedLeaveType,
+            leaveCategory,
             startDate,
             endDate,
+            startTime: startTime || null,
+            endTime: endTime || null,
             totalDays,
             reason,
+            isPaidLeave,
         });
 
         await newRequest.save();
@@ -117,7 +185,7 @@ export const createLeave = async (req, res) => {
                 recipientId: admin.employee_id,
                 senderId: employeeId,
                 title: 'New Leave Application',
-                message: `Employee ${applicantName} has applied for ${totalDays} day(s) of ${leaveType} leave starting from ${startDate}.`,
+                message: `Employee ${applicantName} has applied for ${totalDays} day(s) (${leaveCategory === "hourly_permission" ? "Permission" : leaveCategory === "half_day" ? "Half Day" : "Full Day"}) starting ${startDate}.`,
                 type: 'leave',
                 relatedId: newRequest._id
             });
@@ -131,6 +199,9 @@ export const createLeave = async (req, res) => {
             actor: employeeId,
             changes: { after: newRequest }
         });
+
+        // Email approvers (async — do not block response)
+        notifyLeaveApplicationEmail(newRequest.toObject());
 
         res.status(201).json(newRequest);
     } catch (error) {
@@ -196,9 +267,12 @@ export const updateLeaveStatus = async (req, res) => {
             changes: { before: previousStatus, after: status }
         });
 
+        const isNewlyApproved =
+            (status === "HR_Approved" && previousStatus !== "HR_Approved") ||
+            (status === "AutoProcessed" && previousStatus !== "AutoProcessed");
+
         // Handle Balance Updates
         if (status === 'HR_Approved' && previousStatus !== 'HR_Approved') {
-            // Deduct balance
             const year = new Date().getFullYear();
             const balance = await LeaveBalance.findOne({ employeeId: (request.employeeId || "").trim(), year });
             if (balance) {
@@ -224,6 +298,31 @@ export const updateLeaveStatus = async (req, res) => {
                     balance.CSL_available = balance.CSL_allocated - balance.CSL_used;
                 }
                 await balance.save();
+            }
+        }
+
+        if (isNewlyApproved && !request.whatsappNotifiedAt) {
+            const isPaidLeave = isPaidLeaveType(request.leaveType);
+            notifyLeaveApproved(request.toObject())
+                .then(async (result) => {
+                    if (result?.sent) {
+                        request.whatsappNotifiedAt = new Date();
+                        await request.save();
+                        console.log("[leave] WhatsApp sent after approval");
+                    } else if (result?.skipped) {
+                        console.log("[leave] WhatsApp skipped (WHATSAPP_ENABLED is not true)");
+                    } else {
+                        console.error("[leave] WhatsApp not sent:", result?.error || "unknown");
+                    }
+                })
+                .catch((error) =>
+                    console.error("[leave] Leave WhatsApp failed:", error?.message || error)
+                );
+
+            if (isPaidLeave) {
+                notifyPaidLeaveSubmitted(request.toObject()).catch((error) =>
+                    console.error("[leave] Paid leave WhatsApp failed:", error?.message || error)
+                );
             }
         }
 

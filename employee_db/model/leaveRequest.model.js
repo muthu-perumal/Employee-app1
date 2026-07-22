@@ -9,25 +9,42 @@ const leaveRequestSchema = new mongoose.Schema(
     },
     leaveType: {
       type: String,
-      enum: ["EL", "CL", "SL", "LOP"],
+      enum: ["AL", "CSL", "EL", "CL", "SL", "LOP", "Permission", "HalfDay"],
       required: true,
     },
+    leaveCategory: {
+      type: String,
+      enum: ["multi_day", "half_day", "hourly_permission"],
+      default: "multi_day",
+    },
     startDate: {
-      type: String, // Stored as YYYY-MM-DD to match frontend string comparisons
+      type: String,
       required: true,
     },
     endDate: {
-      type: String, // Stored as YYYY-MM-DD to match frontend string comparisons
+      type: String,
       required: true,
+    },
+    startTime: {
+      type: String,
+      default: null,
+    },
+    endTime: {
+      type: String,
+      default: null,
     },
     totalDays: {
       type: Number,
       required: true,
-      min: 0.5,
+      min: 0.125,
     },
     reason: {
       type: String,
       default: "",
+    },
+    isPaidLeave: {
+      type: Boolean,
+      default: true,
     },
     status: {
       type: String,
@@ -63,6 +80,10 @@ const leaveRequestSchema = new mongoose.Schema(
     approverRemarks: {
       type: String,
       default: "",
+    },
+    whatsappNotifiedAt: {
+      type: Date,
+      default: null,
     },
   },
   { timestamps: true }

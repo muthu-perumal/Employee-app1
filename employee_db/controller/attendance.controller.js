@@ -1,5 +1,6 @@
 import Attendance from "../model/attendance.model.js";
 import Employee from "../model/employee.model.js";
+import { notifyOnLeaveMarked } from "../utils/leaveWhatsAppNotify.js";
 import {
   formatDateIST,
   earliestInMinutesIST,
@@ -821,11 +822,20 @@ const createBulkAttendanceAction = async (req, res,next) => {
           };
         }) || [];
 
-    if(createdCount>0 &&status=="Absent" ){
-      console.log("it is haapening")
-      next();
-    }else{
-
+    if (createdCount > 0 && (status === "Absent" || status === "On Leave")) {
+      if (status === "On Leave") {
+        const createdIds = uniqueIds.filter(
+          (id) => !conflicts.some((c) => c.employeeId === id)
+        );
+        notifyOnLeaveMarked(
+          createdIds.length ? createdIds : uniqueIds,
+          formatDateIST(day)
+        ).catch((error) =>
+          console.error("[attendance] On Leave WhatsApp failed:", error?.message || error)
+        );
+      }
+      return next();
+    }
 
     return res.status(createdCount > 0 ? 201 : 409).json({
       message:
@@ -843,7 +853,6 @@ const createBulkAttendanceAction = async (req, res,next) => {
         conflictItems: conflicts,
       },
     });
-        }
   } catch (error) {
     if (error?.code === 11000) {
       return res.status(409).json({

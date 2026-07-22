@@ -1,0 +1,10 @@
+{
+  "watch": ["controller", "router", "model", "middleware", "utils", "jobs", "index.js"],
+  "ext": "js,mjs,cjs,json",
+  "ignore": [
+    ".wwebjs_auth/**",
+    "scripts/**",
+    "node_modules/**",
+    "*.log"
+  ]
+}
